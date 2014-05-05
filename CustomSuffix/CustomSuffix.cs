@@ -1,7 +1,7 @@
 ﻿/*
 Current To-do List
 [X] Put WIP source code on Git
-[ ] Make chat custom suffix shows up (OnChat)
+[X] Make chat custom suffix shows up (OnChat) - Now plugin is usable but is without stability check and database save
 [ ] SQLite and SQL Database to keep suffixes
 [ ] OnJoin/OnLeave suffix information check
 [ ] Timer to save database each period of time
@@ -40,8 +40,8 @@ namespace CustomSuffix
         {
             ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
             ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
+            ServerApi.Hooks.ServerChat.Register(this, OnChat);
             ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
-            //ServerApi.Hooks.ServerChat.Register(this, OnChat);
         }
 
         protected override void Dispose(bool Disposing)
@@ -50,8 +50,8 @@ namespace CustomSuffix
             {
                 ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
                 ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin);
+                ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
                 ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
-                //ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
             }
             base.Dispose(Disposing);
         }
@@ -71,9 +71,26 @@ namespace CustomSuffix
             //Database Clearance
         }
 
+        public void OnChat(ServerChatEventArgs e)
+        {
+            if (e.Handled)
+                return;
+            TSPlayer tPly = TShock.Players[e.Who];
+            PlySuffix sPly = Psuffix[e.Who];
+            if (tPly == null || sPly == null)
+                return;
+            if (sPly.Suffix != null && !e.Text.StartsWith("/") && !tPly.mute)
+            {
+                e.Handled = true;
+                TSPlayer.All.SendMessage(String.Format(TShock.Config.ChatFormat, tPly.Group.Name, tPly.Group.Prefix,
+                    tPly.Name, sPly.Suffix, e.Text), tPly.Group.R, tPly.Group.G, tPly.Group.B);
+            }
+        }
+
         public void OnLeave(LeaveEventArgs args)
         {
             Psuffix[args.Who] = null;
+            //Database Clearance
         }
 
         void CMDSetSuffix(CommandArgs e)
@@ -81,7 +98,7 @@ namespace CustomSuffix
             if (e.Parameters.Count == 0 || e.Parameters[0].ToLower() == "help" || e.Parameters[0].ToLower() == "info"
                 || e.Parameters[0].ToLower() == "command" || e.Parameters[0].ToLower() == "commands")
             {
-                string PlginVer = "v" + Version.Major.ToString() + Version.Minor.ToString() + Version.Build.ToString() + Version.Revision.ToString();
+                string PlginVer = String.Format("v{0}.{1}.{2}.{3}", Version.Major.ToString(), Version.Minor.ToString(), Version.Build.ToString(), Version.Revision.ToString());
                 e.Player.SendMessage("Custom Suffix " + PlginVer +". Authored by AquaBlitz11", Color.Goldenrod);
                 if (e.Player.Group.HasPermission(Permissions.sufset))
                 {
@@ -217,13 +234,12 @@ namespace CustomSuffix
                                     List<string> Name = new List<string>();
                                     foreach (string NameFound in e.Parameters)
                                     {
-                                        if (NameFound != e.Parameters[0] || NameFound != e.Parameters[1])
+                                        if (NameFound != e.Parameters[0] && NameFound != e.Parameters[1])
                                             Name.Add(NameFound);
                                     }
                                     string SuffixToSet = String.Join(" ", Name.ToArray());
                                     Psuffix[PlayerFound[0].Index].Suffix = SuffixToSet;
                                     Psuffix[PlayerFound[0].Index].Status = true;
-                                    //Database Clearance
                                     e.Player.SendSuccessMessage("{0}'s suffix has been set to {1}!", SuffixToSet, e.Parameters[1]);
                                     PlayerFound[0].SendInfoMessage("{0} changed your custom suffix to {1}!", e.Player.Name, SuffixToSet);
                                 }
@@ -382,14 +398,13 @@ namespace CustomSuffix
                                 else
                                 {
                                     var PlyID = PlayerFound[0].Index;
-                                    if (e.Parameters[1].ToLower() == "on")
+                                    if (e.Parameters[2].ToLower() == "on")
                                     {
                                         if (Psuffix[PlyID].Suffix != null)
                                         {
                                             if (!Psuffix[PlyID].Status)
                                             {
                                                 Psuffix[PlyID].Status = true;
-                                                //Database Clearance
                                                 e.Player.SendSuccessMessage("{0}'s current custom suffix will now be in used.", PlayerFound[0].Name);
                                                 PlayerFound[0].SendInfoMessage("{0} has turned on your custom suffix usage.", e.Player.Name);
                                             }
@@ -405,12 +420,11 @@ namespace CustomSuffix
                                             e.Player.SendErrorMessage("{0} has no custom suffix yet.", PlayerFound[0].Name);
                                         }
                                     }
-                                    else if (e.Parameters[1].ToLower() == "off")
+                                    else if (e.Parameters[2].ToLower() == "off")
                                     {
                                         if (Psuffix[PlyID].Status)
                                         {
                                             Psuffix[PlyID].Status = false;
-                                            //Database Clearance
                                             e.Player.SendSuccessMessage("{0} will be using normal group suffix instead.", PlayerFound[0].Name);
                                             PlayerFound[0].SendInfoMessage("{0} has turned off your custom suffix usage.", e.Player.Name);
                                         }
@@ -420,14 +434,13 @@ namespace CustomSuffix
                                             e.Player.SendErrorMessage("{0} has been already ignoring custom suffix.", PlayerFound[0].Name);
                                         }
                                     }
-                                    else if (e.Parameters[1].ToLower() == "del" || e.Parameters[1].ToLower() == "delete" || e.Parameters[1].ToLower() == "remove")
+                                    else if (e.Parameters[2].ToLower() == "del" || e.Parameters[1].ToLower() == "delete" || e.Parameters[1].ToLower() == "remove")
                                     {
                                         if (Psuffix[PlyID].Suffix != null)
                                         {
                                             Psuffix[PlyID].Status = false;
                                             Psuffix[PlyID].Suffix = null;
-                                            //Database Clearance
-                                            e.Player.SendSuccessMessage("{0}'s custom suffix is now removed.", PlayerFound[0].Name);
+                                            e.Player.SendSuccessMessage("{0r}'s custom suffix is now removed.", PlayerFound[0].Name);
                                             PlayerFound[0].SendInfoMessage("{0} has removed your custom suffix.", e.Player.Name);
                                         }
                                         else
