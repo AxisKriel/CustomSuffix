@@ -2,8 +2,9 @@
 Current To-do List
 [X] Put WIP source code on Git
 [X] Make chat custom suffix shows up (OnChat) - Now plugin is usable but is without stability check and database save
-[ ] SQLite and SQL Database to keep suffixes
-[ ] OnJoin/OnLeave suffix information check
+[X] SQLite and SQL Database to keep suffixes
+[X] OnJoin/OnLeave suffix information check - Unstable Build v0.0.1
+[ ] Check for stablity
 [ ] Timer to save database each period of time
 [ ] Command to clear whole database
 [ ] Server executed command check
@@ -11,6 +12,7 @@ Current To-do List
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Reflection;
@@ -39,9 +41,10 @@ namespace CustomSuffix
         public override void Initialize()
         {
             ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
-            ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
+            //ServerApi.Hooks.ServerJoin.Register(this, OnJoin); - Deciding to keep or remove
             ServerApi.Hooks.ServerChat.Register(this, OnChat);
             ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
+            TShockAPI.Hooks.PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
         }
 
         protected override void Dispose(bool Disposing)
@@ -49,7 +52,7 @@ namespace CustomSuffix
             if (Disposing)
             {
                 ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
-                ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin);
+                //ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin); - Deciding to keep or remove
                 ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
                 ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
             }
@@ -63,12 +66,26 @@ namespace CustomSuffix
                 AllowServer = false,
                 HelpText = "Allow to use custom suffix."
             });
+            string SavePath = Path.Combine(TShock.SavePath, "AquaBlitz11", "CustomSuffix");
+            if (!Directory.Exists(SavePath))
+            {
+                Directory.CreateDirectory(SavePath);
+            }
+            sSQL.SetupDB();
         }
 
-        public void OnJoin(JoinEventArgs args)
+        //public void OnJoin(JoinEventArgs args) { } - Deciding to keep or remove
+
+        public void OnPlayerPostLogin(PlayerPostLoginEventArgs args)
         {
-            Psuffix[args.Who] = new PlySuffix();
-            //Database Clearance
+            Psuffix[args.Player.Index] = new PlySuffix();
+            if (sSQL.GetSuffix(args.Player.UserID) != null)
+            {
+                Psuffix[args.Player.Index].Suffix = sSQL.GetSuffix(args.Player.UserID);
+                Psuffix[args.Player.Index].Status = sSQL.GetStatus(args.Player.UserID);
+            }
+            else
+                Psuffix[args.Player.Index].Status = false;
         }
 
         public void OnChat(ServerChatEventArgs e)
@@ -79,7 +96,7 @@ namespace CustomSuffix
             PlySuffix sPly = Psuffix[e.Who];
             if (tPly == null || sPly == null)
                 return;
-            if (sPly.Suffix != null && !e.Text.StartsWith("/") && !tPly.mute)
+            if (tPly.Group.HasPermission(Permissions.sufset) && sPly.Suffix != null && !e.Text.StartsWith("/") && !tPly.mute)
             {
                 e.Handled = true;
                 TSPlayer.All.SendMessage(String.Format(TShock.Config.ChatFormat, tPly.Group.Name, tPly.Group.Prefix,
@@ -89,8 +106,19 @@ namespace CustomSuffix
 
         public void OnLeave(LeaveEventArgs args)
         {
-            Psuffix[args.Who] = null;
-            //Database Clearance
+            if (Psuffix[args.Who].Suffix != null)
+            {
+                if (!sSQL.AddSuffix(TShock.Players[args.Who].UserID, Psuffix[args.Who].Suffix, Psuffix[args.Who].Status))
+                {
+                    if (!sSQL.UpdateSuffix(args.Who, Psuffix[args.Who].Suffix, Psuffix[args.Who].Status))
+                        Log.ConsoleError("[CustomSuffix] Error occured while saving {0}'s suffix.", TShock.Players[args.Who].Name);
+                }
+            }
+            else
+            {
+                if (!sSQL.RemoveSuffix(TShock.Players[args.Who].UserID))
+                    Log.ConsoleError("[CustomSuffix] Error occured while deleting {0}'s suffix.");
+            }
         }
 
         void CMDSetSuffix(CommandArgs e)
