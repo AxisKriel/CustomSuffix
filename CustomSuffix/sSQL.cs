@@ -39,54 +39,54 @@ namespace CustomSuffix
                 ? (IQueryBuilder)new SqliteQueryCreator()
                 : new MysqlQueryCreator());
             sqlcreator.EnsureExists(new SqlTable("Suffixes",
-                new SqlColumn("UserID", MySqlDbType.Int32),
+                new SqlColumn("UserID", MySqlDbType.Int32) { Primary = true },
                 new SqlColumn("Suffix", MySqlDbType.String),
                 new SqlColumn("Status", MySqlDbType.Int32)));
         }
 
         public static string GetSuffix(int UserID)
         {
-            String query = "SELECT Suffix FROM Suffixes WHERE UserID=@0;";
+            string query = "SELECT Suffix FROM Suffixes WHERE UserID=@0;";
             using (var reader = db.QueryReader(query, UserID))
             {
-                return reader.Get<string>("Suffix");
+                if (reader.Read())
+                    return reader.Get<string>("Suffix");
             }
+            return null;
         }
 
         public static bool GetStatus(int UserID)
         {
-            String query = "SELECT Status FROM Suffixes WHERE UserID=@0";
+            string query = "SELECT Status FROM Suffixes WHERE UserID=@0";
             using (var reader = db.QueryReader(query, UserID))
             {
-                return reader.Get<int>("Status") == 1 ? true : false;
+                if (reader.Read())
+                    return reader.Get<int>("Status") == 1 ? true : false;
             }
+            return false;
         }
 
         public static bool AddSuffix(int UserID, string Suffix, bool Status)
         {
             String query = "INSERT INTO Suffixes (UserID, Suffix, Status) VALUES (@0, @1, @2);";
 
-            if (db.Query(query, UserID, Suffix, (Status ? 1 : 0)) != 1)
-                return false;
-            return true;
+            try { db.Query(query, UserID, Suffix, (Status ? 1 : 0)); return true; }
+            catch { return false; }
         }
 
         public static bool UpdateSuffix(int UserID, string Suffix, bool Status)
         {
             String query = "UPDATE Suffixes SET Suffix=@1, Status=@2 WHERE UserID=@0;";
 
-            if (db.Query(query, UserID, Suffix, Status) != 1)
+            if (db.Query(query, UserID, Suffix, Status ? 1 : 0) != 1)
                 return false;
             return true;
         }
 
-        public static bool RemoveSuffix(int UserID)
+        public static void RemoveSuffix(int UserID)
         {
             String query = "DELETE FROM Suffixes WHERE UserID=@0;";
-
-            if (db.Query(query, UserID) != 1)
-                return false;
-            return true;
+            db.Query(query, UserID);
         }
     }
 }
